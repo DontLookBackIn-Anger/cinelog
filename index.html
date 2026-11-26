@@ -35,6 +35,7 @@
         <button class="nav-pill" data-target="tv">电视剧</button>
         <button class="nav-pill" data-target="anime">动漫</button>
         <button class="nav-pill" data-target="variety">综艺</button>
+        <button class="nav-pill" data-target="notes">影评笔记</button>
       </nav>
 
       <!-- Search & Actions -->
@@ -68,6 +69,14 @@
             </svg>
           </button>
           <input type="file" id="importFileInput" accept="application/json" hidden />
+
+          <button class="btn-glass btn-nav-online" id="btnOnlineSearch" title="联网搜索影视并自动获取高清海报">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1">
+              <circle cx="12" cy="12" r="9.5"/>
+              <path d="M2.5 12h19M12 2.5a14.5 14.5 0 0 1 0 19M12 2.5a14.5 14.5 0 0 0 0 19"/>
+            </svg>
+            <span>联网搜片</span>
+          </button>
 
           <button class="btn-primary" id="btnAddNew">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4">
@@ -111,7 +120,7 @@
 
         <!-- Mini Poster Preview in Hero -->
         <div class="hero-poster-wrap" id="heroPosterWrap">
-          <img id="heroPosterImg" src="" alt="精选海报" />
+          <img id="heroPosterImg" src="" alt="精选海报" referrerpolicy="no-referrer" />
         </div>
       </div>
 
@@ -131,7 +140,9 @@
           <span class="stat-value" id="statAvg">0.0</span>
           <span class="stat-label">平均评分</span>
         </div>
-        <div class="stat-divider"></div>
+        <button class="btn-glass btn-sm btn-autofill-posters hidden" id="btnAutoFillPosters" title="自动联网为当前没有真实海报的片单补全官方海报">
+          ✨ 一键补全海报
+        </button>
         <div class="status-filter-pills" id="statusFilterPills" role="group" aria-label="按状态筛选">
           <button class="filter-chip active" data-status="all">全部状态</button>
           <button class="filter-chip" data-status="watched">已看</button>
@@ -153,6 +164,45 @@
       <p>试试换个关键词，或者点击右上角「记录新片」添加一部吧。</p>
       <button class="btn-glass" id="btnResetFilters">重置筛选</button>
     </div>
+
+    <!-- Reviews & Notes Module -->
+    <section class="notes-section" id="shelf-notes">
+      <div class="shelf-header notes-header">
+        <div class="shelf-title-group">
+          <span class="shelf-accent-bar" style="background:#a78bfa;box-shadow:0 0 14px #a78bfa"></span>
+          <h2 class="shelf-title">
+            <span>📝</span>
+            <span>影评与笔记</span>
+          </h2>
+          <span class="shelf-count" id="notesCount">0 篇</span>
+        </div>
+
+        <div class="notes-header-right">
+          <div class="notes-filter-tabs" id="notesFilterTabs">
+            <button class="filter-chip active" data-note-type="all">全部</button>
+            <button class="filter-chip" data-note-type="review">✍️ 深度影评</button>
+            <button class="filter-chip" data-note-type="note">📝 观影随笔</button>
+            <button class="filter-chip" data-note-type="quote">💬 台词摘录</button>
+            <button class="filter-chip" data-note-type="summary">📚 阶段总结</button>
+          </div>
+          <button class="btn-primary" id="btnAddNote">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4">
+              <line x1="12" y1="5" x2="12" y2="19"/>
+              <line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            <span>写影评 / 笔记</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="notes-grid" id="notesGrid">
+        <!-- Rendered dynamically by app.js -->
+      </div>
+
+      <div class="notes-empty hidden" id="notesEmptyState">
+        <p>还没有符合条件的影评或笔记，点击右上角「写影评 / 笔记」记录你的第一篇感悟吧。</p>
+      </div>
+    </section>
   </main>
 
   <!-- Detail Modal -->
@@ -162,7 +212,7 @@
       <div class="detail-backdrop" id="detailBackdrop"></div>
       <div class="detail-body">
         <div class="detail-poster">
-          <img id="detailPosterImg" src="" alt="海报" />
+          <img id="detailPosterImg" src="" alt="海报" referrerpolicy="no-referrer" />
         </div>
         <div class="detail-info">
           <div class="detail-badges" id="detailBadges"></div>
@@ -184,6 +234,7 @@
 
           <div class="detail-actions">
             <button class="btn-primary" id="btnEditFromDetail">编辑记录</button>
+            <button class="btn-glass" id="btnWriteNoteFromDetail">✍️ 写影评</button>
             <button class="btn-danger" id="btnDeleteFromDetail">删除</button>
           </div>
         </div>
@@ -202,11 +253,21 @@
       <form id="mediaForm" class="media-form">
         <input type="hidden" id="fieldId" />
 
+        <!-- New Feature: Inline Online Poster & Metadata Search Bar -->
+        <div class="inline-online-box">
+          <div class="inline-online-row">
+            <input type="text" id="formOnlineQuery" placeholder="🌐 输入片名联网搜索官方海报与信息（如：星际穿越 / 芙莉莲 / 漫长的季节）..." autocomplete="off" />
+            <button type="button" class="btn-glass btn-sm" id="btnFormOnlineSearch">联网搜海报</button>
+          </div>
+          <div class="inline-online-status hidden" id="formOnlineStatus"></div>
+          <div class="inline-online-results hidden" id="formOnlineResults"></div>
+        </div>
+
         <div class="form-layout">
           <!-- Left: Poster Preview & Upload -->
           <div class="form-poster-col">
             <div class="poster-preview-box" id="posterPreviewBox">
-              <img id="formPosterPreview" src="" alt="海报预览" />
+              <img id="formPosterPreview" src="" alt="海报预览" referrerpolicy="no-referrer" />
               <div class="poster-preview-hint">2:3 影视海报预览</div>
             </div>
             <div class="poster-upload-actions">
@@ -399,11 +460,130 @@
     </div>
   </div>
 
+  <!-- Online Media & Poster Search Modal -->
+  <div class="modal-overlay hidden" id="onlineSearchModal" role="dialog" aria-modal="true" aria-labelledby="onlineSearchTitle">
+    <div class="modal-card online-search-modal-card">
+      <div class="form-header">
+        <div class="sync-modal-title-wrap">
+          <h2 id="onlineSearchTitle">🌐 联网搜片 · 自动添加高清海报</h2>
+          <span class="sync-last-time">聚合 Bangumi / iTunes / MAL动漫 / TVMaze（无需配置即可搜索，也支持可选 TMDB Key）</span>
+        </div>
+        <button class="modal-close" id="onlineSearchClose" aria-label="关闭">&times;</button>
+      </div>
+
+      <div class="online-modal-body">
+        <div class="online-search-bar">
+          <select id="onlineSearchCategory" aria-label="搜索分类">
+            <option value="all">全部分类</option>
+            <option value="movie">🎬 电影</option>
+            <option value="tv">📺 电视剧</option>
+            <option value="anime">🌸 动漫</option>
+            <option value="variety">🎤 综艺</option>
+          </select>
+          <input type="text" id="onlineSearchInput" placeholder="输入电影、电视剧、动漫或综艺片名，回车搜索..." autocomplete="off" />
+          <button type="button" class="btn-primary" id="btnRunOnlineSearch">搜索</button>
+        </div>
+
+        <details class="tmdb-opt-box">
+          <summary>⚙️ 高级选项：配置可选 TMDB API Key（可获得更全中文电影/剧集海报）</summary>
+          <div class="tmdb-opt-row">
+            <input type="password" id="tmdbKeyInput" placeholder="可选：粘贴你的 TMDB API Key 或 Read Access Token" autocomplete="off" />
+            <button type="button" class="btn-glass btn-sm" id="btnSaveTmdbKey">保存 Key</button>
+          </div>
+        </details>
+
+        <div class="online-search-status" id="onlineSearchStatus">输入片名开始联网搜索，点击结果卡片即可自动填入高清海报与基础信息。</div>
+        <div class="online-results-grid" id="onlineResultsGrid"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Note Detail Modal (Reading View) -->
+  <div class="modal-overlay hidden" id="noteDetailModal" role="dialog" aria-modal="true" aria-labelledby="noteDetailTitle">
+    <div class="modal-card note-detail-modal-card">
+      <button class="modal-close" id="noteDetailClose" aria-label="关闭">&times;</button>
+      <div class="note-detail-body">
+        <div class="note-detail-meta-row" id="noteDetailMeta"></div>
+        <h2 class="note-detail-title" id="noteDetailTitle"></h2>
+        <div class="note-linked-media hidden" id="noteDetailLinked"></div>
+        <div class="note-detail-tags" id="noteDetailTags"></div>
+        <div class="note-detail-content" id="noteDetailContent"></div>
+        <div class="detail-actions">
+          <button class="btn-primary" id="btnEditNoteFromDetail">编辑笔记</button>
+          <button class="btn-danger" id="btnDeleteNoteFromDetail">删除笔记</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Note Add / Edit Modal -->
+  <div class="modal-overlay hidden" id="noteFormModal" role="dialog" aria-modal="true" aria-labelledby="noteFormModalTitle">
+    <div class="modal-card note-form-modal-card">
+      <div class="form-header">
+        <h2 id="noteFormModalTitle">写影评 / 笔记</h2>
+        <button class="modal-close" id="noteFormClose" aria-label="关闭">&times;</button>
+      </div>
+
+      <form id="noteForm" class="media-form">
+        <input type="hidden" id="noteFieldId" />
+        <div class="form-fields-col">
+          <div class="form-group">
+            <label for="noteFieldTitle">标题 <span class="req">*</span></label>
+            <input type="text" id="noteFieldTitle" placeholder="例如：重温《星际穿越》后关于时间与爱的几点思考" required />
+          </div>
+
+          <div class="form-row-2">
+            <div class="form-group">
+              <label for="noteFieldType">笔记类型</label>
+              <select id="noteFieldType">
+                <option value="review">✍️ 深度影评</option>
+                <option value="note">📝 观影随笔</option>
+                <option value="quote">💬 台词摘录</option>
+                <option value="summary">📚 阶段总结</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="noteFieldMediaId">关联影视作品（可选）</label>
+              <select id="noteFieldMediaId">
+                <option value="">不关联具体作品</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-row-2">
+            <div class="form-group">
+              <label for="noteFieldDate">记录日期</label>
+              <input type="date" id="noteFieldDate" />
+            </div>
+            <div class="form-group">
+              <label for="noteFieldTags">标签（用空格或逗号分隔）</label>
+              <input type="text" id="noteFieldTags" placeholder="例如：科幻 导演剪辑 台词" />
+            </div>
+          </div>
+
+          <div class="form-group">
+            <div class="note-content-label-row">
+              <label for="noteFieldContent">正文内容 <span class="req">*</span></label>
+              <span class="note-char-count" id="noteCharCount">0 字</span>
+            </div>
+            <textarea id="noteFieldContent" rows="9" placeholder="尽情写下你的影评、拉片分析、喜欢的台词或观影随想..." required></textarea>
+          </div>
+        </div>
+
+        <div class="form-footer">
+          <button type="button" class="btn-ghost" id="btnCancelNoteForm">取消</button>
+          <button type="submit" class="btn-primary">保存笔记</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- Toast Notification -->
   <div class="toast-container" id="toastContainer" aria-live="polite"></div>
 
   <script src="posters.js"></script>
   <script src="data.js"></script>
+  <script src="search.js"></script>
   <script src="sync.js"></script>
   <script src="app.js"></script>
 </body>

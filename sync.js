@@ -200,12 +200,13 @@
     throw new Error("不支持的同步方式");
   }
 
-  async function push(cfg, items, updatedAt) {
+  async function push(cfg, items, updatedAt, notes = []) {
     if (!isConfigured(cfg)) throw new Error("尚未配置云端同步");
     const payload = {
-      version: 1,
+      version: 2,
       updatedAt: updatedAt || Date.now(),
       items,
+      notes,
     };
     if (cfg.provider === "gist") return pushToGist(cfg, payload);
     if (cfg.provider === "supabase") return pushToSupabase(cfg, payload);

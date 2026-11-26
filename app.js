@@ -8,6 +8,7 @@
  */
 (function () {
   const STORAGE_KEY = "cinelog_media_items_v1";
+  const STORAGE_NOTES_KEY = "cinelog_notes_v1";
   const STORAGE_UPDATED_KEY = "cinelog_local_updated_at_v1";
 
   const STATUS_META = {
@@ -19,6 +20,9 @@
   // Application State
   const state = {
     items: [],
+    notes: [],
+    noteTypeFilter: "all",
+    currentNoteDetailId: null,
     localUpdatedAt: 0,
     syncConfig: null,
     syncState: "idle", // "idle" | "syncing" | "synced" | "error"
@@ -59,14 +63,64 @@
     statTotal: document.getElementById("statTotal"),
     statWatched: document.getElementById("statWatched"),
     statAvg: document.getElementById("statAvg"),
+    btnAutoFillPosters: document.getElementById("btnAutoFillPosters"),
 
     // Toolbar Actions
+    btnOnlineSearch: document.getElementById("btnOnlineSearch"),
     btnAddNew: document.getElementById("btnAddNew"),
     btnExport: document.getElementById("btnExport"),
     btnImport: document.getElementById("btnImport"),
     importFileInput: document.getElementById("importFileInput"),
     btnSyncStatus: document.getElementById("btnSyncStatus"),
     syncStatusText: document.getElementById("syncStatusText"),
+
+    // Notes Section & Modals
+    notesCount: document.getElementById("notesCount"),
+    notesFilterTabs: document.getElementById("notesFilterTabs"),
+    notesGrid: document.getElementById("notesGrid"),
+    notesEmptyState: document.getElementById("notesEmptyState"),
+    btnAddNote: document.getElementById("btnAddNote"),
+    btnWriteNoteFromDetail: document.getElementById("btnWriteNoteFromDetail"),
+
+    noteDetailModal: document.getElementById("noteDetailModal"),
+    noteDetailClose: document.getElementById("noteDetailClose"),
+    noteDetailMeta: document.getElementById("noteDetailMeta"),
+    noteDetailTitle: document.getElementById("noteDetailTitle"),
+    noteDetailLinked: document.getElementById("noteDetailLinked"),
+    noteDetailTags: document.getElementById("noteDetailTags"),
+    noteDetailContent: document.getElementById("noteDetailContent"),
+    btnEditNoteFromDetail: document.getElementById("btnEditNoteFromDetail"),
+    btnDeleteNoteFromDetail: document.getElementById("btnDeleteNoteFromDetail"),
+
+    noteFormModal: document.getElementById("noteFormModal"),
+    noteFormModalTitle: document.getElementById("noteFormModalTitle"),
+    noteFormClose: document.getElementById("noteFormClose"),
+    btnCancelNoteForm: document.getElementById("btnCancelNoteForm"),
+    noteForm: document.getElementById("noteForm"),
+    noteFieldId: document.getElementById("noteFieldId"),
+    noteFieldTitle: document.getElementById("noteFieldTitle"),
+    noteFieldType: document.getElementById("noteFieldType"),
+    noteFieldMediaId: document.getElementById("noteFieldMediaId"),
+    noteFieldDate: document.getElementById("noteFieldDate"),
+    noteFieldTags: document.getElementById("noteFieldTags"),
+    noteFieldContent: document.getElementById("noteFieldContent"),
+    noteCharCount: document.getElementById("noteCharCount"),
+
+    // Online Search Modal & Inline Search
+    onlineSearchModal: document.getElementById("onlineSearchModal"),
+    onlineSearchClose: document.getElementById("onlineSearchClose"),
+    onlineSearchCategory: document.getElementById("onlineSearchCategory"),
+    onlineSearchInput: document.getElementById("onlineSearchInput"),
+    btnRunOnlineSearch: document.getElementById("btnRunOnlineSearch"),
+    tmdbKeyInput: document.getElementById("tmdbKeyInput"),
+    btnSaveTmdbKey: document.getElementById("btnSaveTmdbKey"),
+    onlineSearchStatus: document.getElementById("onlineSearchStatus"),
+    onlineResultsGrid: document.getElementById("onlineResultsGrid"),
+
+    formOnlineQuery: document.getElementById("formOnlineQuery"),
+    btnFormOnlineSearch: document.getElementById("btnFormOnlineSearch"),
+    formOnlineStatus: document.getElementById("formOnlineStatus"),
+    formOnlineResults: document.getElementById("formOnlineResults"),
 
     // Sync Modal
     syncModal: document.getElementById("syncModal"),
@@ -151,10 +205,24 @@
     return JSON.parse(JSON.stringify(window.CineData.INITIAL_ITEMS));
   }
 
+  function loadNotes() {
+    try {
+      const raw = localStorage.getItem(STORAGE_NOTES_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch (e) {
+      console.warn("Failed to read notes:", e);
+    }
+    return JSON.parse(JSON.stringify(window.CineData.INITIAL_NOTES || []));
+  }
+
   function saveItems(options = {}) {
     const { skipCloudPush = false, updatedAt = Date.now() } = options;
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state.items));
+      localStorage.setItem(STORAGE_NOTES_KEY, JSON.stringify(state.notes));
       state.localUpdatedAt = updatedAt;
       localStorage.setItem(STORAGE_UPDATED_KEY, String(updatedAt));
     } catch (e) {
@@ -245,6 +313,13 @@
     dom.statTotal.textContent = total;
     dom.statWatched.textContent = watched;
     dom.statAvg.textContent = avg;
+
+    // Show "一键补全海报" button whenever any item lacks a real posterUrl
+    const missingCount = state.items.filter((i) => !i.posterUrl || !i.posterUrl.trim()).length;
+    if (dom.btnAutoFillPosters && !dom.btnAutoFillPosters.disabled) {
+      dom.btnAutoFillPosters.classList.toggle("hidden", missingCount === 0);
+      dom.btnAutoFillPosters.textContent = `✨ 一键补全海报 (${missingCount})`;
+    }
   }
 
   function renderHero() {
@@ -387,7 +462,7 @@
 
     card.innerHTML = `
       <div class="poster-frame">
-        <img src="${posterSrc}" alt="${escapeHtml(item.title)}" loading="lazy" />
+        <img src="${posterSrc}" alt="${escapeHtml(item.title)}" loading="lazy" referrerpolicy="no-referrer" />
         <span class="card-status-badge ${st.className}">${st.label}</span>
         ${item.rating ? `<span class="card-rating-badge">★ ${Number(item.rating).toFixed(1)}</span>` : ""}
         <div class="poster-hover-overlay">
@@ -618,8 +693,12 @@
     });
   }
 
-  function openFormModal(editItem = null, defaultCategory = "movie") {
+  function openFormModal(editItem = null, defaultCategory = "movie", prefill = null) {
     state.formTempPosterDataUrl = "";
+    dom.formOnlineQuery.value = "";
+    dom.formOnlineStatus.classList.add("hidden");
+    dom.formOnlineResults.classList.add("hidden");
+    dom.formOnlineResults.innerHTML = "";
     const today = new Date().toISOString().slice(0, 10);
 
     if (editItem) {
@@ -643,13 +722,19 @@
         dom.fieldPosterUrl.value = editItem.posterUrl || "";
       }
     } else {
-      dom.formModalTitle.textContent = "记录新片";
+      dom.formModalTitle.textContent = prefill ? "联网收录新片" : "记录新片";
       dom.mediaForm.reset();
       dom.fieldId.value = "";
-      dom.fieldCategory.value = defaultCategory;
+      dom.fieldCategory.value = (prefill && prefill.category) || defaultCategory;
       dom.fieldStatus.value = "watched";
       dom.fieldDate.value = today;
-      dom.fieldYear.value = new Date().getFullYear();
+      dom.fieldYear.value = (prefill && prefill.year) || new Date().getFullYear();
+      if (prefill) {
+        dom.fieldTitle.value = prefill.title || "";
+        dom.fieldOriginalTitle.value = prefill.originalTitle || "";
+        dom.fieldPosterUrl.value = prefill.posterUrl || "";
+        dom.fieldReview.value = prefill.summary || "";
+      }
       setStarPicker(5);
       state.formPaletteKey =
         window.PosterArt.palettes[Math.floor(Math.random() * window.PosterArt.palettes.length)];
@@ -725,6 +810,7 @@
       state.searchQuery = dom.searchInput.value;
       dom.searchClear.classList.toggle("hidden", !state.searchQuery);
       renderShelves();
+      renderNotes();
     });
 
     dom.searchClear.addEventListener("click", () => {
@@ -732,6 +818,7 @@
       state.searchQuery = "";
       dom.searchClear.classList.add("hidden");
       renderShelves();
+      renderNotes();
       dom.searchInput.focus();
     });
 
@@ -775,6 +862,12 @@
       const item = state.items.find((i) => i.id === state.currentDetailId);
       closeDetailModal();
       if (item) openFormModal(item);
+    });
+
+    dom.btnWriteNoteFromDetail.addEventListener("click", () => {
+      const item = state.items.find((i) => i.id === state.currentDetailId);
+      closeDetailModal();
+      if (item) openNoteFormModal(null, item.id);
     });
 
     dom.btnDeleteFromDetail.addEventListener("click", () => {
@@ -880,9 +973,15 @@
       renderAll();
     });
 
-    // Export JSON
+    // Export JSON (includes both items & notes)
     dom.btnExport.addEventListener("click", () => {
-      const blob = new Blob([JSON.stringify(state.items, null, 2)], {
+      const bundle = {
+        version: 2,
+        exportedAt: new Date().toISOString(),
+        items: state.items,
+        notes: state.notes,
+      };
+      const blob = new Blob([JSON.stringify(bundle, null, 2)], {
         type: "application/json",
       });
       const url = URL.createObjectURL(blob);
@@ -891,10 +990,10 @@
       a.download = `cinelog-backup-${new Date().toISOString().slice(0, 10)}.json`;
       a.click();
       URL.revokeObjectURL(url);
-      showToast("已导出 JSON 备份文件");
+      showToast("已导出片单与影评笔记 JSON 备份");
     });
 
-    // Import JSON
+    // Import JSON (supports both v1 array and v2 { items, notes } bundle)
     dom.btnImport.addEventListener("click", () => dom.importFileInput.click());
     dom.importFileInput.addEventListener("change", (e) => {
       const file = e.target.files[0];
@@ -903,11 +1002,22 @@
       reader.onload = () => {
         try {
           const imported = JSON.parse(reader.result);
-          if (!Array.isArray(imported)) throw new Error("Invalid format");
-          state.items = imported;
-          saveItems();
-          renderAll();
-          showToast(`成功导入 ${imported.length} 条影视记录`);
+          if (Array.isArray(imported)) {
+            state.items = imported;
+            saveItems();
+            renderAll();
+            showToast(`成功导入 ${imported.length} 条影视记录`);
+          } else if (imported && Array.isArray(imported.items)) {
+            state.items = imported.items;
+            if (Array.isArray(imported.notes)) {
+              state.notes = imported.notes;
+            }
+            saveItems();
+            renderAll();
+            showToast(`成功导入 ${state.items.length} 条影视与 ${state.notes.length} 篇笔记`);
+          } else {
+            throw new Error("Invalid format");
+          }
         } catch {
           showToast("导入失败：请选择有效的 CineLog JSON 备份文件");
         }
@@ -919,10 +1029,113 @@
     // Escape key closes modals
     window.addEventListener("keydown", (e) => {
       if (e.key === "Escape") {
-        if (!dom.syncModal.classList.contains("hidden")) closeSyncModal();
+        if (!dom.onlineSearchModal.classList.contains("hidden")) closeOnlineSearchModal();
+        else if (!dom.noteFormModal.classList.contains("hidden")) closeNoteFormModal();
+        else if (!dom.noteDetailModal.classList.contains("hidden")) closeNoteDetailModal();
+        else if (!dom.syncModal.classList.contains("hidden")) closeSyncModal();
         else if (!dom.formModal.classList.contains("hidden")) closeFormModal();
         else if (!dom.detailModal.classList.contains("hidden")) closeDetailModal();
       }
+    });
+
+    // Online Search Modal & Inline Form Search Events
+    if (dom.btnAutoFillPosters) {
+      dom.btnAutoFillPosters.addEventListener("click", autoFillMissingPosters);
+    }
+    dom.btnOnlineSearch.addEventListener("click", openOnlineSearchModal);
+    dom.onlineSearchClose.addEventListener("click", closeOnlineSearchModal);
+    dom.onlineSearchModal.addEventListener("click", (e) => {
+      if (e.target === dom.onlineSearchModal) closeOnlineSearchModal();
+    });
+    dom.btnRunOnlineSearch.addEventListener("click", runOnlineSearch);
+    dom.onlineSearchInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        runOnlineSearch();
+      }
+    });
+    dom.btnSaveTmdbKey.addEventListener("click", () => {
+      window.CineSearch.setTmdbKey(dom.tmdbKeyInput.value);
+      showToast(dom.tmdbKeyInput.value.trim() ? "已保存 TMDB Key，搜索将自动启用" : "已清除 TMDB Key");
+    });
+
+    dom.btnFormOnlineSearch.addEventListener("click", runInlineOnlineSearch);
+    dom.formOnlineQuery.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        runInlineOnlineSearch();
+      }
+    });
+
+    // Notes Section & Modals Events
+    dom.notesFilterTabs.addEventListener("click", (e) => {
+      const chip = e.target.closest(".filter-chip");
+      if (!chip) return;
+      state.noteTypeFilter = chip.dataset.noteType;
+      dom.notesFilterTabs.querySelectorAll(".filter-chip").forEach((c) => c.classList.remove("active"));
+      chip.classList.add("active");
+      renderNotes();
+    });
+
+    dom.btnAddNote.addEventListener("click", () => openNoteFormModal(null, ""));
+    dom.noteDetailClose.addEventListener("click", closeNoteDetailModal);
+    dom.noteDetailModal.addEventListener("click", (e) => {
+      if (e.target === dom.noteDetailModal) closeNoteDetailModal();
+    });
+    dom.btnEditNoteFromDetail.addEventListener("click", () => {
+      const note = state.notes.find((n) => n.id === state.currentNoteDetailId);
+      closeNoteDetailModal();
+      if (note) openNoteFormModal(note);
+    });
+    dom.btnDeleteNoteFromDetail.addEventListener("click", () => {
+      const note = state.notes.find((n) => n.id === state.currentNoteDetailId);
+      if (!note) return;
+      if (confirm(`确定要删除笔记《${note.title}》吗？`)) {
+        state.notes = state.notes.filter((n) => n.id !== note.id);
+        saveItems();
+        closeNoteDetailModal();
+        renderNotes();
+        showToast(`已删除笔记《${note.title}》`);
+      }
+    });
+
+    dom.noteFormClose.addEventListener("click", closeNoteFormModal);
+    dom.btnCancelNoteForm.addEventListener("click", closeNoteFormModal);
+    dom.noteFormModal.addEventListener("click", (e) => {
+      if (e.target === dom.noteFormModal) closeNoteFormModal();
+    });
+    dom.noteFieldContent.addEventListener("input", () => {
+      dom.noteCharCount.textContent = `${dom.noteFieldContent.value.length} 字`;
+    });
+    dom.noteForm.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const id = dom.noteFieldId.value;
+      const tags = dom.noteFieldTags.value
+        .split(/[\s,，、]+/)
+        .map((t) => t.trim())
+        .filter(Boolean);
+
+      const payload = {
+        id: id || "note_" + Date.now(),
+        title: dom.noteFieldTitle.value.trim(),
+        type: dom.noteFieldType.value || "review",
+        mediaId: dom.noteFieldMediaId.value || "",
+        date: dom.noteFieldDate.value || new Date().toISOString().slice(0, 10),
+        tags,
+        content: dom.noteFieldContent.value.trim(),
+      };
+
+      if (id) {
+        const idx = state.notes.findIndex((n) => n.id === id);
+        if (idx !== -1) state.notes[idx] = payload;
+        showToast(`已更新笔记《${payload.title}》`);
+      } else {
+        state.notes.unshift(payload);
+        showToast(`已保存新笔记《${payload.title}》`);
+      }
+      saveItems();
+      closeNoteFormModal();
+      renderNotes();
     });
 
     // Cloud Sync Modal Events
@@ -1112,9 +1325,12 @@
         const shouldApply = force || state.localUpdatedAt === 0 || remoteTs > state.localUpdatedAt;
         if (shouldApply) {
           state.items = result.data.items;
+          if (Array.isArray(result.data.notes)) {
+            state.notes = result.data.notes;
+          }
           saveItems({ skipCloudPush: true, updatedAt: remoteTs || Date.now() });
           renderAll();
-          if (!silent) showToast(`已从云端同步 ${state.items.length} 条记录`);
+          if (!silent) showToast(`已从云端同步 ${state.items.length} 条影视与 ${state.notes.length} 篇笔记`);
         } else if (!silent) {
           showToast("当前已是最新数据");
         }
@@ -1141,7 +1357,7 @@
     updateSyncStatusUI("syncing", "上传中...");
     try {
       const ts = state.localUpdatedAt || Date.now();
-      const res = await window.CineSync.push(state.syncConfig, state.items, ts);
+      const res = await window.CineSync.push(state.syncConfig, state.items, ts, state.notes);
       const nextCfg = {
         ...state.syncConfig,
         lastSyncedAt: Date.now(),
@@ -1206,15 +1422,339 @@
     await pushToCloud({ silent: false });
   }
 
+  // ================= REVIEWS & NOTES MODULE =================
+  function getNoteTypeMeta(typeId) {
+    const list = window.CineData.NOTE_TYPES || [];
+    return list.find((t) => t.id === typeId) || { id: "review", label: "深度影评", icon: "✍️" };
+  }
+
+  function renderNotes() {
+    const q = state.searchQuery.trim().toLowerCase();
+    const filtered = state.notes.filter((n) => {
+      if (state.noteTypeFilter !== "all" && n.type !== state.noteTypeFilter) return false;
+      if (!q) return true;
+      const linked = state.items.find((i) => i.id === n.mediaId);
+      const hay = [
+        n.title,
+        n.content,
+        linked ? linked.title : "",
+        ...(n.tags || []),
+      ]
+        .join(" ")
+        .toLowerCase();
+      return hay.includes(q);
+    });
+
+    dom.notesCount.textContent = `${filtered.length} 篇`;
+    dom.notesGrid.innerHTML = "";
+    dom.notesEmptyState.classList.toggle("hidden", filtered.length > 0);
+
+    filtered.forEach((note) => {
+      const typeMeta = getNoteTypeMeta(note.type);
+      const linked = state.items.find((i) => i.id === note.mediaId);
+      const card = document.createElement("article");
+      card.className = "note-card";
+
+      const posterHtml = linked
+        ? `<div class="note-card-poster" title="关联作品：${escapeHtml(linked.title)}">
+             <img src="${getPosterSrc(linked)}" alt="${escapeHtml(linked.title)}" loading="lazy" />
+           </div>`
+        : "";
+
+      const tagsHtml = (note.tags || [])
+        .slice(0, 3)
+        .map((t) => `<span class="detail-tag"># ${escapeHtml(t)}</span>`)
+        .join("");
+
+      card.innerHTML = `
+        ${posterHtml}
+        <div class="note-card-main">
+          <div class="note-card-top">
+            <span class="note-type-pill">${typeMeta.icon} ${typeMeta.label}</span>
+            <span class="note-date">${escapeHtml(note.date || "")}</span>
+          </div>
+          <h3 class="note-card-title">${escapeHtml(note.title)}</h3>
+          <p class="note-card-excerpt">${escapeHtml(note.content)}</p>
+          <div class="note-card-footer">
+            ${linked ? `<span class="note-media-chip">🎬 ${escapeHtml(linked.title)}</span>` : ""}
+            ${tagsHtml}
+          </div>
+        </div>
+      `;
+
+      card.addEventListener("click", () => openNoteDetailModal(note.id));
+      dom.notesGrid.appendChild(card);
+    });
+  }
+
+  function openNoteDetailModal(noteId) {
+    const note = state.notes.find((n) => n.id === noteId);
+    if (!note) return;
+    state.currentNoteDetailId = noteId;
+    const typeMeta = getNoteTypeMeta(note.type);
+    const linked = state.items.find((i) => i.id === note.mediaId);
+
+    dom.noteDetailMeta.innerHTML = `
+      <span class="note-type-pill">${typeMeta.icon} ${typeMeta.label}</span>
+      <span class="note-date">${escapeHtml(note.date || "")}</span>
+    `;
+    dom.noteDetailTitle.textContent = note.title;
+
+    if (linked) {
+      const cat = getCategoryMeta(linked.category);
+      dom.noteDetailLinked.classList.remove("hidden");
+      dom.noteDetailLinked.innerHTML = `
+        <img src="${getPosterSrc(linked)}" alt="${escapeHtml(linked.title)}" />
+        <div class="note-linked-info">
+          <span class="note-linked-name">关联作品：《${escapeHtml(linked.title)}》</span>
+          <span class="note-linked-sub">${cat.icon} ${cat.name} · ${linked.year || ""} · ★ ${Number(linked.rating || 0).toFixed(1)}（点击查看影视详情）</span>
+        </div>
+      `;
+      dom.noteDetailLinked.onclick = () => {
+        closeNoteDetailModal();
+        openDetailModal(linked.id);
+      };
+    } else {
+      dom.noteDetailLinked.classList.add("hidden");
+      dom.noteDetailLinked.onclick = null;
+    }
+
+    dom.noteDetailTags.innerHTML = (note.tags || [])
+      .map((t) => `<span class="detail-tag"># ${escapeHtml(t)}</span>`)
+      .join("");
+    dom.noteDetailTags.classList.toggle("hidden", !note.tags || note.tags.length === 0);
+
+    dom.noteDetailContent.textContent = note.content || "";
+    dom.noteDetailModal.classList.remove("hidden");
+    document.body.style.overflow = "hidden";
+  }
+
+  function closeNoteDetailModal() {
+    dom.noteDetailModal.classList.add("hidden");
+    state.currentNoteDetailId = null;
+    document.body.style.overflow = "";
+  }
+
+  function populateNoteMediaSelect(selectedId = "") {
+    dom.noteFieldMediaId.innerHTML = `<option value="">不关联具体作品</option>`;
+    state.items.forEach((item) => {
+      const cat = getCategoryMeta(item.category);
+      const opt = document.createElement("option");
+      opt.value = item.id;
+      opt.textContent = `${cat.icon} ${item.title}${item.year ? ` (${item.year})` : ""}`;
+      if (item.id === selectedId) opt.selected = true;
+      dom.noteFieldMediaId.appendChild(opt);
+    });
+  }
+
+  function openNoteFormModal(editNote = null, defaultMediaId = "") {
+    const today = new Date().toISOString().slice(0, 10);
+    if (editNote) {
+      dom.noteFormModalTitle.textContent = "编辑影评 / 笔记";
+      dom.noteFieldId.value = editNote.id;
+      dom.noteFieldTitle.value = editNote.title || "";
+      dom.noteFieldType.value = editNote.type || "review";
+      populateNoteMediaSelect(editNote.mediaId || "");
+      dom.noteFieldDate.value = editNote.date || today;
+      dom.noteFieldTags.value = (editNote.tags || []).join(" ");
+      dom.noteFieldContent.value = editNote.content || "";
+    } else {
+      dom.noteFormModalTitle.textContent = "写影评 / 笔记";
+      dom.noteForm.reset();
+      dom.noteFieldId.value = "";
+      dom.noteFieldType.value = "review";
+      populateNoteMediaSelect(defaultMediaId);
+      dom.noteFieldDate.value = today;
+      if (defaultMediaId) {
+        const linked = state.items.find((i) => i.id === defaultMediaId);
+        if (linked) {
+          dom.noteFieldTitle.value = `《${linked.title}》观后感`;
+        }
+      }
+    }
+    dom.noteCharCount.textContent = `${dom.noteFieldContent.value.length} 字`;
+    dom.noteFormModal.classList.remove("hidden");
+    document.body.style.overflow = "hidden";
+    setTimeout(() => dom.noteFieldTitle.focus(), 60);
+  }
+
+  function closeNoteFormModal() {
+    dom.noteFormModal.classList.add("hidden");
+    document.body.style.overflow = "";
+  }
+
+  // ================= ONLINE MEDIA & POSTER SEARCH =================
+  async function autoFillMissingPosters() {
+    const missing = state.items.filter((i) => !i.posterUrl || !i.posterUrl.trim());
+    if (missing.length === 0) {
+      showToast("所有片单都已经有海报啦");
+      return;
+    }
+
+    const btn = dom.btnAutoFillPosters;
+    btn.disabled = true;
+    let done = 0;
+    let matched = 0;
+    btn.textContent = `⏳ 正在补全海报 (0/${missing.length})...`;
+
+    // Process 3 items concurrently for fast, smooth progressive updates
+    const concurrency = 3;
+    let cursor = 0;
+
+    async function worker() {
+      while (cursor < missing.length) {
+        const idx = cursor++;
+        const item = missing[idx];
+        const url = await window.CineSearch.findBestPoster(item);
+        if (url) {
+          item.posterUrl = url;
+          matched++;
+        }
+        done++;
+        btn.textContent = `⏳ 正在补全海报 (${done}/${missing.length})...`;
+        if (url) {
+          renderHero();
+          renderShelves();
+          renderNotes();
+        }
+      }
+    }
+
+    await Promise.all(Array.from({ length: Math.min(concurrency, missing.length) }, worker));
+
+    btn.disabled = false;
+    if (matched > 0) {
+      saveItems();
+      renderAll();
+      showToast(`已自动联网补全 ${matched} 部影视的官方海报，并自动保存同步！`);
+    } else {
+      renderStats();
+      showToast("暂未获取到在线海报，请检查网络或稍后再试");
+    }
+  }
+
+  function openOnlineSearchModal() {
+    dom.tmdbKeyInput.value = window.CineSearch.getTmdbKey();
+    dom.onlineSearchModal.classList.remove("hidden");
+    document.body.style.overflow = "hidden";
+    setTimeout(() => dom.onlineSearchInput.focus(), 60);
+  }
+
+  function closeOnlineSearchModal() {
+    dom.onlineSearchModal.classList.add("hidden");
+    document.body.style.overflow = "";
+  }
+
+  async function runOnlineSearch() {
+    const q = dom.onlineSearchInput.value.trim();
+    const cat = dom.onlineSearchCategory.value;
+    if (!q) {
+      showToast("请输入要搜索的片名");
+      return;
+    }
+    dom.onlineSearchStatus.textContent = `正在联网搜索「${q}」的高清海报与信息...`;
+    dom.onlineResultsGrid.innerHTML = "";
+
+    try {
+      const results = await window.CineSearch.searchMedia(q, cat);
+      if (results.length === 0) {
+        dom.onlineSearchStatus.textContent = `未找到「${q}」的公开海报结果，试试换中文/英文原名，或在上方配置可选 TMDB Key。`;
+        return;
+      }
+      dom.onlineSearchStatus.textContent = `找到 ${results.length} 条结果，点击任意卡片即可自动填入高清海报并收录：`;
+      results.forEach((item) => {
+        const card = document.createElement("div");
+        card.className = "online-result-card";
+        card.innerHTML = `
+          <div class="online-result-poster">
+            <img src="${escapeHtml(item.posterUrl)}" alt="${escapeHtml(item.title)}" loading="lazy" referrerpolicy="no-referrer" />
+            <span class="online-source-badge">${escapeHtml(item.source)}</span>
+          </div>
+          <div class="online-result-info">
+            <div class="online-result-title" title="${escapeHtml(item.title)}">${escapeHtml(item.title)}</div>
+            <div class="online-result-sub">${item.year || "未知年份"} · ${getCategoryMeta(item.category).name}</div>
+          </div>
+        `;
+        card.addEventListener("click", () => {
+          closeOnlineSearchModal();
+          openFormModal(null, item.category, item);
+          showToast(`已自动填入《${item.title}》海报与信息`);
+        });
+        dom.onlineResultsGrid.appendChild(card);
+      });
+    } catch (err) {
+      dom.onlineSearchStatus.textContent = "联网搜索遇到网络波动，请稍后再试。";
+    }
+  }
+
+  async function runInlineOnlineSearch() {
+    const q = (dom.formOnlineQuery.value || dom.fieldTitle.value).trim();
+    if (!q) {
+      showToast("请先输入片名再搜海报");
+      dom.formOnlineQuery.focus();
+      return;
+    }
+    dom.formOnlineQuery.value = q;
+    dom.formOnlineStatus.classList.remove("hidden");
+    dom.formOnlineStatus.textContent = `正在联网搜「${q}」的海报...`;
+    dom.formOnlineResults.classList.add("hidden");
+    dom.formOnlineResults.innerHTML = "";
+
+    try {
+      const results = await window.CineSearch.searchMedia(q, dom.fieldCategory.value || "all");
+      if (results.length === 0) {
+        dom.formOnlineStatus.textContent = "未搜到匹配海报，可尝试换英文原名，或继续使用下方本地上传 / 手动 URL。";
+        return;
+      }
+      dom.formOnlineStatus.textContent = `找到 ${results.length} 张海报：点「全填」自动补全片名+海报，点「仅海报」只替换海报`;
+      dom.formOnlineResults.classList.remove("hidden");
+      results.slice(0, 10).forEach((item) => {
+        const card = document.createElement("div");
+        card.className = "inline-pick-card";
+        card.innerHTML = `
+          <div class="inline-pick-thumb">
+            <img src="${escapeHtml(item.posterUrl)}" alt="${escapeHtml(item.title)}" loading="lazy" referrerpolicy="no-referrer" />
+          </div>
+          <div class="inline-pick-title" title="${escapeHtml(item.title)}">${escapeHtml(item.title)}</div>
+          <div class="inline-pick-actions">
+            <button type="button" class="inline-mini-btn" data-act="all">全填</button>
+            <button type="button" class="inline-mini-btn" data-act="poster">仅海报</button>
+          </div>
+        `;
+        card.querySelector('[data-act="all"]').addEventListener("click", () => {
+          state.formTempPosterDataUrl = "";
+          dom.fieldTitle.value = item.title || dom.fieldTitle.value;
+          if (item.originalTitle) dom.fieldOriginalTitle.value = item.originalTitle;
+          if (item.year) dom.fieldYear.value = item.year;
+          if (item.category) dom.fieldCategory.value = item.category;
+          dom.fieldPosterUrl.value = item.posterUrl;
+          updateFormPosterPreview();
+          showToast(`已填入《${item.title}》信息与高清海报`);
+        });
+        card.querySelector('[data-act="poster"]').addEventListener("click", () => {
+          state.formTempPosterDataUrl = "";
+          dom.fieldPosterUrl.value = item.posterUrl;
+          updateFormPosterPreview();
+          showToast("已替换为选中的官方海报");
+        });
+        dom.formOnlineResults.appendChild(card);
+      });
+    } catch {
+      dom.formOnlineStatus.textContent = "联网搜索失败，请检查网络或稍后重试。";
+    }
+  }
+
   function renderAll() {
     renderStats();
     renderHero();
     renderShelves();
+    renderNotes();
   }
 
   // ================= INIT =================
   function init() {
     state.items = loadItems();
+    state.notes = loadNotes();
     state.syncConfig = window.CineSync.loadConfig();
     bindEvents();
     renderAll();
