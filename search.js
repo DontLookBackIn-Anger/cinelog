@@ -107,9 +107,10 @@
       .filter((r) => r.title && r.posterUrl);
   }
 
-  // 2. iTunes Search via JSONP (Great for Movies with Chinese titles & HD posters)
-  async function searchItunes(query) {
-    const url = `https://itunes.apple.com/search?term=${encodeURIComponent(query)}&country=cn&lang=zh_cn&media=movie&entity=movie&limit=8`;
+  // 2. iTunes Search via JSONP (Great for Movies & TV with Chinese titles & HD posters, zero CORS issues)
+  async function searchItunes(query, media = "movie") {
+    const entity = media === "tvShow" ? "tvSeason" : "movie";
+    const url = `https://itunes.apple.com/search?term=${encodeURIComponent(query)}&country=cn&lang=zh_cn&media=${media}&entity=${entity}&limit=8`;
     const data = await fetchJsonp(url);
     const list = Array.isArray(data && data.results) ? data.results : [];
     return list
@@ -122,7 +123,7 @@
           title: item.trackName || item.collectionName || "",
           originalTitle: item.artistName ? `导演 / 出品：${item.artistName}` : "",
           year: yearMatch ? Number(yearMatch[0]) : "",
-          category: "movie",
+          category: media === "tvShow" ? "tv" : "movie",
           posterUrl: hdPoster,
           summary: (item.longDescription || item.shortDescription || "").trim().slice(0, 140),
         };
@@ -223,12 +224,13 @@
     tasks.push(searchBangumi(q, categoryHint));
 
     if (categoryHint === "all" || categoryHint === "movie") {
-      tasks.push(searchItunes(q));
+      tasks.push(searchItunes(q, "movie"));
     }
     if (categoryHint === "all" || categoryHint === "anime") {
       tasks.push(searchJikan(q));
     }
     if (categoryHint === "all" || categoryHint === "tv" || categoryHint === "variety") {
+      tasks.push(searchItunes(q, "tvShow"));
       tasks.push(searchTvMaze(q));
     }
 
