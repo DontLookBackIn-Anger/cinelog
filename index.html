@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>影迹 · CineLog — 个人影音记录器</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- Ambient dynamic background glow -->
+  <div class="ambient-bg" id="ambientBg" aria-hidden="true"></div>
+
+  <!-- Sticky Top Navigation -->
+  <header class="navbar" id="navbar">
+    <div class="navbar-inner">
+      <div class="brand" id="brandHome" title="回到顶部">
+        <span class="brand-logo" aria-hidden="true">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <rect x="2" y="4" width="20" height="16" rx="3.5" stroke="currentColor" stroke-width="1.8"/>
+            <path d="M9.5 8.5L15.5 12L9.5 15.5V8.5Z" fill="currentColor"/>
+            <line x1="6" y1="4" x2="6" y2="20" stroke="currentColor" stroke-width="1.4" stroke-opacity="0.45"/>
+            <line x1="18" y1="4" x2="18" y2="20" stroke="currentColor" stroke-width="1.4" stroke-opacity="0.45"/>
+          </svg>
+        </span>
+        <div class="brand-text">
+          <span class="brand-title">影迹</span>
+          <span class="brand-sub">CineLog</span>
+        </div>
+      </div>
+
+      <!-- Category Quick Jump Tabs -->
+      <nav class="nav-pills" id="navPills" aria-label="分类导航">
+        <button class="nav-pill active" data-target="all">全部</button>
+        <button class="nav-pill" data-target="movie">电影</button>
+        <button class="nav-pill" data-target="tv">电视剧</button>
+        <button class="nav-pill" data-target="anime">动漫</button>
+        <button class="nav-pill" data-target="variety">综艺</button>
+      </nav>
+
+      <!-- Search & Actions -->
+      <div class="nav-actions">
+        <div class="search-box">
+          <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="7.5"/>
+            <path d="M20 20L16.65 16.65"/>
+          </svg>
+          <input type="text" id="searchInput" placeholder="搜索片名、标签、短评..." autocomplete="off" />
+          <button class="search-clear hidden" id="searchClear" aria-label="清除搜索">&times;</button>
+        </div>
+
+        <div class="action-group">
+          <button class="sync-pill" id="btnSyncStatus" title="云端同步设置">
+            <span class="sync-dot" id="syncDot"></span>
+            <span class="sync-text" id="syncStatusText">云同步</span>
+          </button>
+          <button class="icon-btn" id="btnExport" title="导出 JSON 备份">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+          </button>
+          <button class="icon-btn" id="btnImport" title="导入 JSON 备份">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="17 8 12 3 7 8"/>
+              <line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+          </button>
+          <input type="file" id="importFileInput" accept="application/json" hidden />
+
+          <button class="btn-primary" id="btnAddNew">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4">
+              <line x1="12" y1="5" x2="12" y2="19"/>
+              <line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            <span>记录新片</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="main-container">
+    <!-- Hero Spotlight & Personal Stats -->
+    <section class="hero-section" id="heroSection">
+      <div class="hero-backdrop" id="heroBackdrop"></div>
+      <div class="hero-content">
+        <div class="hero-info">
+          <div class="hero-badge" id="heroBadge">精选记录</div>
+          <h1 class="hero-title" id="heroTitle">星际穿越</h1>
+          <div class="hero-meta" id="heroMeta">
+            <span class="hero-rating">★ 5.0</span>
+            <span>2014</span>
+            <span>电影</span>
+            <span>已看</span>
+          </div>
+          <p class="hero-review" id="heroReview">爱是唯一可以超越时间与空间的事物。每次重温配乐响起依然热泪盈眶。</p>
+          <div class="hero-buttons">
+            <button class="btn-glass" id="heroDetailBtn">查看详情</button>
+            <button class="btn-ghost" id="heroNextBtn" title="切换精选">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="23 4 23 10 17 10"/>
+                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+              </svg>
+              换一部
+            </button>
+          </div>
+        </div>
+
+        <!-- Mini Poster Preview in Hero -->
+        <div class="hero-poster-wrap" id="heroPosterWrap">
+          <img id="heroPosterImg" src="" alt="精选海报" />
+        </div>
+      </div>
+
+      <!-- Compact Stats Bar -->
+      <div class="stats-bar" id="statsBar">
+        <div class="stat-item">
+          <span class="stat-value" id="statTotal">0</span>
+          <span class="stat-label">累计记录</span>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="stat-item">
+          <span class="stat-value" id="statWatched">0</span>
+          <span class="stat-label">已看完</span>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="stat-item">
+          <span class="stat-value" id="statAvg">0.0</span>
+          <span class="stat-label">平均评分</span>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="status-filter-pills" id="statusFilterPills" role="group" aria-label="按状态筛选">
+          <button class="filter-chip active" data-status="all">全部状态</button>
+          <button class="filter-chip" data-status="watched">已看</button>
+          <button class="filter-chip" data-status="watching">在看</button>
+          <button class="filter-chip" data-status="wishlist">想看</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Categorized Sliding Shelves Container -->
+    <div id="shelvesContainer" class="shelves-container">
+      <!-- Shelves rendered dynamically by app.js -->
+    </div>
+
+    <!-- Empty Search State -->
+    <div id="globalEmptyState" class="empty-state hidden">
+      <div class="empty-icon">🎬</div>
+      <h3>没有找到匹配的记录</h3>
+      <p>试试换个关键词，或者点击右上角「记录新片」添加一部吧。</p>
+      <button class="btn-glass" id="btnResetFilters">重置筛选</button>
+    </div>
+  </main>
+
+  <!-- Detail Modal -->
+  <div class="modal-overlay hidden" id="detailModal" role="dialog" aria-modal="true" aria-labelledby="detailTitle">
+    <div class="modal-card detail-modal-card">
+      <button class="modal-close" id="detailClose" aria-label="关闭">&times;</button>
+      <div class="detail-backdrop" id="detailBackdrop"></div>
+      <div class="detail-body">
+        <div class="detail-poster">
+          <img id="detailPosterImg" src="" alt="海报" />
+        </div>
+        <div class="detail-info">
+          <div class="detail-badges" id="detailBadges"></div>
+          <h2 class="detail-title" id="detailTitle"></h2>
+          <div class="detail-subtitle" id="detailSubtitle"></div>
+
+          <div class="detail-rating-row">
+            <div class="detail-stars" id="detailStars"></div>
+            <span class="detail-score" id="detailScore"></span>
+            <span class="detail-date" id="detailDate"></span>
+          </div>
+
+          <div class="detail-tags" id="detailTags"></div>
+
+          <div class="detail-review-box">
+            <div class="detail-review-label">我的观后感</div>
+            <p class="detail-review-text" id="detailReview"></p>
+          </div>
+
+          <div class="detail-actions">
+            <button class="btn-primary" id="btnEditFromDetail">编辑记录</button>
+            <button class="btn-danger" id="btnDeleteFromDetail">删除</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add / Edit Modal -->
+  <div class="modal-overlay hidden" id="formModal" role="dialog" aria-modal="true" aria-labelledby="formModalTitle">
+    <div class="modal-card form-modal-card">
+      <div class="form-header">
+        <h2 id="formModalTitle">记录新片</h2>
+        <button class="modal-close" id="formClose" aria-label="关闭">&times;</button>
+      </div>
+
+      <form id="mediaForm" class="media-form">
+        <input type="hidden" id="fieldId" />
+
+        <div class="form-layout">
+          <!-- Left: Poster Preview & Upload -->
+          <div class="form-poster-col">
+            <div class="poster-preview-box" id="posterPreviewBox">
+              <img id="formPosterPreview" src="" alt="海报预览" />
+              <div class="poster-preview-hint">2:3 影视海报预览</div>
+            </div>
+            <div class="poster-upload-actions">
+              <label class="btn-glass upload-label" for="posterFileInput">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="3" y="3" width="18" height="18" rx="2"/>
+                  <circle cx="8.5" cy="8.5" r="1.5"/>
+                  <polyline points="21 15 16 10 5 21"/>
+                </svg>
+                上传本地海报
+              </label>
+              <input type="file" id="posterFileInput" accept="image/*" hidden />
+              <button type="button" class="btn-ghost btn-sm" id="btnGenPoster">随机生成艺术海报</button>
+            </div>
+            <div class="form-group">
+              <label for="fieldPosterUrl">或粘贴海报图片链接 (URL)</label>
+              <input type="url" id="fieldPosterUrl" placeholder="https://example.com/poster.jpg" />
+            </div>
+          </div>
+
+          <!-- Right: Metadata Fields -->
+          <div class="form-fields-col">
+            <div class="form-row-2">
+              <div class="form-group">
+                <label for="fieldCategory">分类 <span class="req">*</span></label>
+                <select id="fieldCategory" required>
+                  <option value="movie">🎬 电影</option>
+                  <option value="tv">📺 电视剧</option>
+                  <option value="anime">🌸 动漫</option>
+                  <option value="variety">🎤 综艺</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="fieldStatus">观看状态</label>
+                <select id="fieldStatus">
+                  <option value="watched">已看</option>
+                  <option value="watching">在看</option>
+                  <option value="wishlist">想看</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="fieldTitle">片名 <span class="req">*</span></label>
+              <input type="text" id="fieldTitle" placeholder="例如：千与千寻 / 漫长的季节" required />
+            </div>
+
+            <div class="form-row-2">
+              <div class="form-group">
+                <label for="fieldOriginalTitle">原名 / 英文名 / 副标题</label>
+                <input type="text" id="fieldOriginalTitle" placeholder="例如：Spirited Away" />
+              </div>
+              <div class="form-group">
+                <label for="fieldYear">年份</label>
+                <input type="number" id="fieldYear" min="1900" max="2035" placeholder="2024" />
+              </div>
+            </div>
+
+            <div class="form-row-2">
+              <div class="form-group">
+                <label>我的评分</label>
+                <div class="star-picker" id="starPicker" role="radiogroup" aria-label="评分">
+                  <button type="button" class="star-btn" data-val="1" aria-label="1星">★</button>
+                  <button type="button" class="star-btn" data-val="2" aria-label="2星">★</button>
+                  <button type="button" class="star-btn" data-val="3" aria-label="3星">★</button>
+                  <button type="button" class="star-btn" data-val="4" aria-label="4星">★</button>
+                  <button type="button" class="star-btn" data-val="5" aria-label="5星">★</button>
+                  <span class="star-picker-val" id="starPickerVal">5.0</span>
+                </div>
+                <input type="hidden" id="fieldRating" value="5" />
+              </div>
+              <div class="form-group">
+                <label for="fieldDate">观看日期</label>
+                <input type="date" id="fieldDate" />
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="fieldTags">标签（用空格或逗号分隔）</label>
+              <input type="text" id="fieldTags" placeholder="例如：科幻 悬疑 治愈 必看" />
+            </div>
+
+            <div class="form-group">
+              <label for="fieldReview">短评 / 观后感</label>
+              <textarea id="fieldReview" rows="3" placeholder="记录此刻的想法、喜欢的台词或片段..."></textarea>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-footer">
+          <button type="button" class="btn-ghost" id="btnCancelForm">取消</button>
+          <button type="submit" class="btn-primary" id="btnSubmitForm">保存记录</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Cloud Sync Modal -->
+  <div class="modal-overlay hidden" id="syncModal" role="dialog" aria-modal="true" aria-labelledby="syncModalTitle">
+    <div class="modal-card sync-modal-card">
+      <div class="form-header">
+        <div class="sync-modal-title-wrap">
+          <h2 id="syncModalTitle">☁️ 云端多端同步</h2>
+          <span class="sync-last-time" id="syncLastTime">尚未配置云端同步</span>
+        </div>
+        <button class="modal-close" id="syncClose" aria-label="关闭">&times;</button>
+      </div>
+
+      <div class="sync-modal-body">
+        <!-- Provider Tabs -->
+        <div class="sync-provider-tabs" id="syncProviderTabs">
+          <button type="button" class="provider-tab active" data-provider="gist">
+            GitHub Gist <span class="provider-rec">推荐</span>
+          </button>
+          <button type="button" class="provider-tab" data-provider="supabase">
+            Supabase 数据库
+          </button>
+          <button type="button" class="provider-tab" data-provider="none">
+            仅本地存储
+          </button>
+        </div>
+
+        <!-- GitHub Gist Config -->
+        <div class="provider-panel" id="panelGist">
+          <div class="sync-guide-box">
+            <strong>为什么推荐 GitHub Gist？</strong> 永久免费、不会休眠、自带私密存储，配合 GitHub Pages / Vercel / Cloudflare Pages 部署最省心。<br/>
+            <span>获取步骤：前往 GitHub → Settings → Developer settings → Personal access tokens (Tokens classic) → 勾选 <code>gist</code> 权限并生成 Token。</span>
+          </div>
+          <div class="form-group">
+            <label for="syncGistToken">GitHub Personal Access Token <span class="req">*</span></label>
+            <input type="password" id="syncGistToken" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx" autocomplete="off" />
+          </div>
+          <div class="form-group">
+            <label for="syncGistId">Gist ID（首次留空，保存并推送后会自动创建）</label>
+            <input type="text" id="syncGistId" placeholder="已有云端 Gist 时填入，用于另一端绑定同一份数据" autocomplete="off" />
+          </div>
+        </div>
+
+        <!-- Supabase Config -->
+        <div class="provider-panel hidden" id="panelSupabase">
+          <div class="sync-guide-box">
+            <strong>Supabase 云端数据库配置：</strong> 在 Supabase SQL Editor 中先执行建表语句，再填入 Project URL 与 anon public key。
+            <button type="button" class="btn-ghost btn-sm sync-copy-sql" id="btnCopySql">复制建表 SQL</button>
+          </div>
+          <div class="form-group">
+            <label for="syncSupabaseUrl">Project URL <span class="req">*</span></label>
+            <input type="url" id="syncSupabaseUrl" placeholder="https://xxxxxxxx.supabase.co" autocomplete="off" />
+          </div>
+          <div class="form-group">
+            <label for="syncSupabaseKey">Anon Public Key <span class="req">*</span></label>
+            <input type="password" id="syncSupabaseKey" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." autocomplete="off" />
+          </div>
+          <div class="form-group">
+            <label for="syncSupabaseRowId">同步空间标识（多端保持一致即可）</label>
+            <input type="text" id="syncSupabaseRowId" placeholder="default_user" value="default_user" autocomplete="off" />
+          </div>
+        </div>
+
+        <!-- Local Only Panel -->
+        <div class="provider-panel hidden" id="panelNone">
+          <div class="sync-guide-box">
+            当前仅使用当前浏览器的本地存储（localStorage）。如需在电脑和手机间自动同步，请切换到上方 <strong>GitHub Gist</strong> 或 <strong>Supabase</strong>。
+          </div>
+        </div>
+
+        <!-- Auto Sync Toggle -->
+        <label class="sync-checkbox-row" id="syncAutoRow">
+          <input type="checkbox" id="syncAutoToggle" checked />
+          <span>开启自动同步（增删改后自动上传，切换回网页自动拉取最新记录）</span>
+        </label>
+
+        <!-- Manual Sync Controls -->
+        <div class="sync-action-bar" id="syncActionBar">
+          <button type="button" class="btn-primary" id="btnSaveAndSync">保存配置并同步</button>
+          <button type="button" class="btn-glass" id="btnManualPull">立即拉取云端</button>
+          <button type="button" class="btn-glass" id="btnManualPush">强制推送本地到云端</button>
+        </div>
+
+        <!-- Quick Phone/Device Pairing Code -->
+        <div class="sync-transfer-box">
+          <div class="sync-transfer-title">📱 手机 / 另一台设备快捷绑定</div>
+          <p class="sync-transfer-desc">在一端配置好后，点击「复制配置口令」发给自己的手机，在手机网页里粘贴即可一键完成绑定，无需手动输入长密钥。</p>
+          <div class="sync-transfer-row">
+            <input type="text" id="syncShareCodeInput" placeholder="粘贴来自另一台设备的 CINELOG1:... 配置口令" autocomplete="off" />
+            <button type="button" class="btn-glass btn-sm" id="btnApplyShareCode">一键导入</button>
+            <button type="button" class="btn-ghost btn-sm" id="btnCopyShareCode">复制本机口令</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div class="toast-container" id="toastContainer" aria-live="polite"></div>
+
+  <script src="posters.js"></script>
+  <script src="data.js"></script>
+  <script src="sync.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
